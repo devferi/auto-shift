@@ -1,59 +1,291 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# AutoShiftLog – Automated Attendance Scheduler (Laravel + WhatsApp)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Sistem ini melakukan **absensi otomatis via WhatsApp** berdasarkan **jadwal shift** yang sudah ditentukan.  
+Pesan dikirim ke WA dengan format:
 
-## About Laravel
+- Login  : `log#in#<kode_tempat>#<kode_orang>`
+- Logout : `log#out#<kode_tempat>#<kode_orang>`
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Contoh:
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+```text
+log#in#cs1#af1
+    cs1 = kode tempat / unit kerja (misal: CSSD 1)
+    af1 = kode orang / karyawan (misal: Andi Fredi)
+```
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## ✨ Fitur Utama
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+- Master **Shift** dengan jam berbeda untuk:
+  - **Pagi**
+    - Senin–Kamis : 08:00 – 16:00  
+    - Jumat       : 08:00 – 13:00  
+  - **Siang**
+    - Senin–Kamis : 13:00 – 21:00  
+    - Jumat       : 14:00 – 19:30  
+- Master **Tempat / Unit Kerja** (contoh: `cs1 = CSSD 1`).
+- Master **Karyawan** dengan **kode orang** (contoh: `af1 = Andi Fredi`).
+- Input **jadwal shift harian** per karyawan + tempat.
+- Input **pola shift mingguan** (misal: 2 minggu Pagi, 3 minggu Siang → repeat).
+- Auto-generate:
+  - Jadwal harian dari pola minggu.
+  - **Attendance jobs** (login/logout) dengan jam **random** (±15 menit).
+- Integrasi ke **WhatsApp Gateway** (HTTP GET).
+- **Rekap** jadwal & status pengiriman (login / logout).
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+---
 
-## Laravel Sponsors
+## 🧱 Arsitektur Singkat
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+### 1. Format Pesan WA
 
-### Premium Partners
+- Login  : `log#in#<kode_tempat>#<kode_orang>`
+- Logout : `log#out#<kode_tempat>#<kode_orang>`
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+Contoh:
 
-## Contributing
+```text
+log#in#cs1#af1
+log#out#cs1#af1
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### 2. Endpoint WhatsApp
 
-## Code of Conduct
+```http
+GET https://wa.posyandudigital.my.id/message/send-text
+  ?session=waiskak
+  &to=<wa_number>
+  &text=<message>
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+- `session` : nama session WA (bisa diset di `.env`).
+- `to`      : nomor WhatsApp karyawan (format 62…).
+- `text`    : isi pesan (`log#in#...` / `log#out#...`).
 
-## Security Vulnerabilities
+---
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## 🗄️ Tabel Utama (Database)
 
-## License
+### `work_places` – Master Tempat / Unit Kerja
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+- `id`
+- `code` (unik) – contoh: `cs1`
+- `name` – contoh: `CSSD 1`
+- `description`
+- `is_active`
+- timestamps
+
+### `employees` – Master Karyawan
+
+- `id`
+- `name` – contoh: `Andi Fredi`
+- `person_code` (unik) – contoh: `af1`
+- `wa_number` – contoh: `62812xxxxxx`
+- `default_work_place_id` (nullable)
+- `session_key` (nullable)
+- `is_active`
+- timestamps
+
+### `shifts` – Jenis Shift
+
+- `id`
+- `code` – contoh: `PAGI`, `SIANG`
+- `name` – contoh: `Shift Pagi`
+- `random_before_minutes` (default 15)
+- `random_after_minutes` (default 15)
+- `is_active`
+- timestamps
+
+### `shift_time_rules` – Jam Kerja per Hari
+
+Mapping shift ke hari (Senin–Kamis vs Jumat).
+
+- `id`
+- `shift_id` (FK → `shifts`)
+- `day_of_week` (1=Senin, ..., 7=Minggu)
+- `start_time`
+- `end_time`
+- `is_active`
+- timestamps
+
+Contoh data:
+
+- Pagi:
+  - day 1–4 : 08:00 – 16:00
+  - day 5   : 08:00 – 13:00
+- Siang:
+  - day 1–4 : 13:00 – 21:00
+  - day 5   : 14:00 – 19:30
+
+### `employee_shift_schedules` – Jadwal Harian
+
+- `id`
+- `employee_id` (FK → `employees`)
+- `work_place_id` (FK → `work_places`)
+- `shift_id` (FK → `shifts`)
+- `date`
+- `login_message` (nullable)
+- `logout_message` (nullable)
+- timestamps
+
+> Jika `login_message` / `logout_message` kosong → akan di-generate otomatis:  
+> `log#in#<work_places.code>#<employees.person_code>`  
+> `log#out#<work_places.code>#<employees.person_code>`
+
+### `shift_week_patterns` – Pola Shift Mingguan
+
+- `id`
+- `employee_id`
+- `work_place_id` (optional: kalau tempatnya fixed)
+- `start_date`
+- `cycle_length_weeks`
+- `description` (ex: "2 minggu Pagi, 3 minggu Siang")
+- `is_active`
+- timestamps
+
+### `shift_week_pattern_items`
+
+- `id`
+- `shift_week_pattern_id`
+- `order_index`
+- `duration_weeks`
+- `shift_id`
+- timestamps
+
+### `attendance_jobs` – Job Kirim WA
+
+- `id`
+- `employee_id`
+- `work_place_id`
+- `shift_id`
+- `date` (tanggal shift)
+- `type` (`login` / `logout`)
+- `message` (text WA final)
+- `run_at` (datetime)
+- `status` (`pending` / `done` / `failed`)
+- `api_url`
+- `api_response`
+- `attempts`
+- timestamps
+
+---
+
+## ⚙️ Konfigurasi `.env`
+
+Tambahkan variabel:
+
+```env
+WA_BASE_URL=https://wa.posyandudigital.my.id/message/send-text
+WA_DEFAULT_SESSION=waiskak
+ATTENDANCE_RANDOM_BEFORE_DEFAULT=15
+ATTENDANCE_RANDOM_AFTER_DEFAULT=15
+```
+
+---
+
+## 🧩 Cron & Scheduler (Laravel)
+
+### 1. Generate Jadwal Harian dari Pola Mingguan
+
+- **Waktu jalan**: 00:05 setiap hari.
+- Tugas:
+  - Baca `shift_week_patterns` yang aktif.
+  - Tentukan minggu ke berapa (week_position).
+  - Tentukan `shift_id` (PAGI / SIANG).
+  - Insert / update `employee_shift_schedules` untuk `today`.
+
+### 2. Generate `attendance_jobs` Harian
+
+- **Waktu jalan**: 00:10 setiap hari.
+- Tugas:
+  - Baca semua `employee_shift_schedules` untuk `today`.
+  - Cari `shift_time_rules` berdasarkan `shift_id` + `day_of_week(today)`.
+  - Hitung:
+    - `login_window_start` = start_time - random_before_minutes  
+    - `login_window_end`   = start_time  
+    - `logout_window_start`= end_time  
+    - `logout_window_end`  = end_time + random_after_minutes
+  - Generate 2 job:
+    - `type = login`, message `log#in#...`
+    - `type = logout`, message `log#out#...`
+
+### 3. Eksekusi `attendance_jobs`
+
+- **Waktu jalan**: setiap menit.
+- Tugas:
+  - Ambil job dengan:
+    - `status = 'pending'`
+    - `run_at <= now()`
+  - Panggil API WA:
+    - `to   = employees.wa_number`
+    - `text = attendance_jobs.message`
+  - Update:
+    - Jika sukses → `status = done`
+    - Jika gagal  → `attempts++`, jika `attempts >= 3` → `status = failed`
+
+---
+
+## 🚀 Setup Cepat
+
+1. Clone repo & install dependencies:
+
+```bash
+composer install
+cp .env.example .env
+php artisan key:generate
+```
+
+2. Setup database di `.env`, lalu:
+
+```bash
+php artisan migrate
+```
+
+3. (Opsional) Tambah seeder untuk:
+   - `shifts` (PAGI, SIANG)
+   - `shift_time_rules` (jam Senin–Kamis & Jumat)
+   - `work_places` (cs1 = CSSD 1, dst)
+   - `employees` (af1 = Andi Fredi, dst)
+
+4. Daftarkan scheduler di cron server:
+
+```bash
+* * * * * php /path/to/artisan schedule:run >> /dev/null 2>&1
+```
+
+---
+
+## ✅ Contoh Alur
+
+1. Admin input:
+   - `work_place`: `cs1` → CSSD 1  
+   - `employee`: `af1` → Andi Fredi  
+   - shift pattern: 2 minggu Pagi, 3 minggu Siang.
+
+2. Malam hari:
+   - Sistem generate jadwal harian: Andi Fredi di `cs1`, shift Pagi.
+
+3. Jam 00:10:
+   - Sistem generate:
+     - Job login (random antara 07:45–08:00 Senin–Kamis / 07:45–08:00 Jumat).
+     - Job logout (random antara 16:00–16:15 Senin–Kamis / 13:00–13:15 Jumat).
+
+4. Saat `run_at` tercapai:
+   - Sistem kirim:
+     - `log#in#cs1#af1` saat masuk.
+     - `log#out#cs1#af1` saat pulang.
+
+---
+
+## 📝 Status
+
+Dokumen ini adalah **README teknis** untuk developer Laravel yang akan mengimplementasikan:
+
+- Struktur database
+- Scheduler
+- Integrasi ke WhatsApp Gateway
+- Halaman admin sederhana (master + jadwal + rekap)
+
+Silakan sesuaikan nama project (misal: `AutoShiftLog`, `AutoAttend`, dll) sesuai branding yang kamu pilih.
