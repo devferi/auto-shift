@@ -22,6 +22,7 @@ Route::prefix('admin')->group(function () {
         ->whereNumber('schedule');
     Route::post('jobs/generate', [\App\Http\Controllers\Admin\AttendanceJobController::class, 'generate'])->name('admin.attendance_jobs.generate');
     Route::post('jobs/run', [\App\Http\Controllers\Admin\AttendanceJobController::class, 'run'])->name('admin.attendance_jobs.run');
+    Route::post('jobs/randomize-seconds', [\App\Http\Controllers\Admin\AttendanceJobController::class, 'randomizeSeconds'])->name('admin.attendance_jobs.randomize_seconds');
     Route::resource('jobs', \App\Http\Controllers\Admin\AttendanceJobController::class)
         ->names('admin.attendance_jobs')
         ->parameters(['jobs' => 'attendance_job'])

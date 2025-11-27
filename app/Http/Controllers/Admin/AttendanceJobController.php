@@ -121,14 +121,52 @@ class AttendanceJobController extends Controller
             $loginEnd = $startAt->copy()->subMinutes(9);
             $logoutStart = $endAt->copy()->addMinutes(11);
             $logoutEnd = $endAt->copy()->addMinutes(21);
-            $loginRunAt = $this->randomUniqueTimeBetween($loginStart, $loginEnd);
-            $logoutRunAt = $this->randomUniqueTimeBetween($logoutStart, $logoutEnd);
+            $loginFrom = $loginStart->copy()->subDays(7)->startOfDay();
+            $loginTo = $loginEnd->copy()->addDays(7)->endOfDay();
+            $usedLoginMinutes = AttendanceJob::where('employee_id',$sch->employee_id)
+                ->whereBetween('run_at', [$loginFrom, $loginTo])
+                ->where('type','login')
+                ->pluck('run_at')
+                ->map(fn($dt) => Carbon::parse($dt)->format('i'))
+                ->all();
+            $usedLoginMmss = AttendanceJob::where('employee_id',$sch->employee_id)
+                ->whereBetween('run_at', [$loginFrom, $loginTo])
+                ->where('type','login')
+                ->pluck('run_at')
+                ->map(fn($dt) => Carbon::parse($dt)->format('i:s'))
+                ->all();
+            $loginSalt = $sch->employee_id.'|login|'.$date->toDateString();
+            $loginRunAt = $this->randomUniqueMinuteAndSecond($loginStart, $loginEnd, $usedLoginMinutes, $usedLoginMmss, $loginSalt);
+
+            $logoutFrom = $logoutStart->copy()->subDays(7)->startOfDay();
+            $logoutTo = $logoutEnd->copy()->addDays(7)->endOfDay();
+            $usedLogoutMinutes = AttendanceJob::where('employee_id',$sch->employee_id)
+                ->whereBetween('run_at', [$logoutFrom, $logoutTo])
+                ->where('type','logout')
+                ->pluck('run_at')
+                ->map(fn($dt) => Carbon::parse($dt)->format('i'))
+                ->all();
+            $usedLogoutMmss = AttendanceJob::where('employee_id',$sch->employee_id)
+                ->whereBetween('run_at', [$logoutFrom, $logoutTo])
+                ->where('type','logout')
+                ->pluck('run_at')
+                ->map(fn($dt) => Carbon::parse($dt)->format('i:s'))
+                ->all();
+            $logoutSalt = $sch->employee_id.'|logout|'.$date->toDateString();
+            $logoutRunAt = $this->randomUniqueMinuteAndSecond($logoutStart, $logoutEnd, $usedLogoutMinutes, $usedLogoutMmss, $logoutSalt);
+            if ($loginRunAt->second === 0) { $loginRunAt = $loginRunAt->copy()->setSecond(random_int(1,59)); }
+            if ($logoutRunAt->second === 0) { $logoutRunAt = $logoutRunAt->copy()->setSecond(random_int(1,59)); }
             $loginMsg = $sch->login_message ?: ('log#in#'.$sch->workPlace->code.'#'.$sch->employee->person_code);
             $logoutMsg = $sch->logout_message ?: ('log#out#'.$sch->workPlace->code.'#'.$sch->employee->person_code);
-            $existsLogin = AttendanceJob::where('employee_id',$sch->employee_id)
+            $existingLogin = AttendanceJob::where('employee_id',$sch->employee_id)
                 ->whereDate('date',$date->toDateString())
-                ->where('type','login')->exists();
-            if (!$existsLogin) {
+                ->where('type','login')->first();
+            if ($existingLogin) {
+                $existingLogin->run_at = $loginRunAt;
+                $existingLogin->message = $loginMsg;
+                $existingLogin->save();
+                $created++;
+            } else {
                 AttendanceJob::create([
                     'employee_id' => $sch->employee_id,
                     'work_place_id' => $sch->work_place_id,
@@ -141,10 +179,15 @@ class AttendanceJobController extends Controller
                 ]);
                 $created++;
             }
-            $existsLogout = AttendanceJob::where('employee_id',$sch->employee_id)
+            $existingLogout = AttendanceJob::where('employee_id',$sch->employee_id)
                 ->whereDate('date',$date->toDateString())
-                ->where('type','logout')->exists();
-            if (!$existsLogout) {
+                ->where('type','logout')->first();
+            if ($existingLogout) {
+                $existingLogout->run_at = $logoutRunAt;
+                $existingLogout->message = $logoutMsg;
+                $existingLogout->save();
+                $created++;
+            } else {
                 AttendanceJob::create([
                     'employee_id' => $sch->employee_id,
                     'work_place_id' => $sch->work_place_id,
@@ -162,39 +205,84 @@ class AttendanceJobController extends Controller
             ->with('status', 'Generated '.$created.' jobs');
     }
 
-    protected function randomUniqueTimeBetween(Carbon $start, Carbon $end): Carbon
+    protected function randomUniqueMinuteAndSecond(Carbon $start, Carbon $end, array $excludeMinutes, array $excludeMmss, ?string $salt = null): Carbon
     {
         if ($end->lessThanOrEqualTo($start)) {
             $end = $start->copy()->addMinutes(2);
         }
         $diffMinutes = $end->diffInMinutes($start);
         if ($diffMinutes <= 0) {
-            return $start->copy()->addMinute();
+            return $start->copy()->addMinute()->setSecond(random_int(1,59));
         }
-        $from = $start->copy()->subDays(7)->startOfDay();
-        $to = $start->copy()->addDays(7)->endOfDay();
-        $used = AttendanceJob::whereBetween('run_at', [$from, $to])
-            ->pluck('run_at')
-            ->map(fn($dt) => Carbon::parse($dt)->format('i:s'))
-            ->all();
-        $usedSet = array_flip($used);
-        for ($tries = 0; $tries < 200; $tries++) {
-            $minuteOffset = $diffMinutes > 1 ? random_int(1, $diffMinutes - 1) : 1;
-            $secondOffset = random_int(1, 59);
-            $candidate = $start->copy()->addMinutes($minuteOffset);
-            $mmss = $candidate->format('i').':'.sprintf('%02d', $secondOffset);
-            if (!isset($usedSet[$mmss])) {
-                return $candidate->copy()->addSeconds($secondOffset);
+        $excludeMinuteSet = array_flip($excludeMinutes);
+        $excludeMmssSet = array_flip($excludeMmss);
+        $offsetPool = [];
+        for ($i = 1; $i < $diffMinutes; $i++) {
+            $m = $start->copy()->addMinutes($i)->format('i');
+            if (!isset($excludeMinuteSet[$m])) {
+                $offsetPool[] = $i;
             }
         }
-        $minuteOffset = $diffMinutes > 1 ? random_int(1, $diffMinutes - 1) : 1;
-        $secondOffset = random_int(1, 59);
-        return $start->copy()->addMinutes($minuteOffset)->addSeconds($secondOffset);
+        $indices = !empty($offsetPool) ? array_values($offsetPool) : range(1, max(1, $diffMinutes - 1));
+        $count = count($indices);
+        if ($count === 0) { $indices = [1]; $count = 1; }
+        $saltParts = explode('|', (string) $salt);
+        $empId = isset($saltParts[0]) ? (int) $saltParts[0] : 0;
+        $typeKey = isset($saltParts[1]) && $saltParts[1] === 'logout' ? 11 : 3;
+        $baseOffset = 1 + ((($start->dayOfYear + ($empId * 7) + $typeKey)) % max(1, ($diffMinutes - 1)));
+        // Find baseOffset in indices or step forward until found
+        $startIdx = array_search($baseOffset, $indices, true);
+        if ($startIdx === false) { $startIdx = 0; }
+        for ($step = 0; $step < $count; $step++) {
+            $i = $indices[($startIdx + $step) % $count];
+            $candidate = $start->copy()->addMinutes($i);
+            $secSeed = ($start->dayOfYear + crc32(($salt ?? '').'|'.$candidate->format('YmdHi')));
+            $secondOffset = 1 + ($secSeed % 59);
+            $mmss = $candidate->format('i').':'.sprintf('%02d', $secondOffset);
+            if (!isset($excludeMmssSet[$mmss])) {
+                return $candidate->copy()->setSecond($secondOffset);
+            }
+        }
+        $candidate = $start->copy()->addMinutes($indices[0]);
+        $secondOffset = 1 + (($start->dayOfYear + crc32(($salt ?? '').'|fb|'.$candidate->format('YmdHi'))) % 59);
+        return $candidate->copy()->setSecond($secondOffset);
     }
     public function run(Request $request)
     {
         Artisan::call('attendance:run-jobs');
         return redirect()->route('admin.attendance_jobs.index')->with('status', 'Executed pending jobs');
+    }
+
+    public function randomizeSeconds(Request $request)
+    {
+        $query = AttendanceJob::where('status','pending');
+        if ($request->filled('date')) {
+            $query->whereDate('date', $request->get('date'));
+        }
+        $jobs = $query->orderBy('run_at')->limit(500)->get();
+        $updated = 0;
+        foreach ($jobs as $job) {
+            $ra = Carbon::parse($job->run_at);
+            if ($ra->second !== 0) { continue; }
+            $from = $ra->copy()->subDays(7)->startOfDay();
+            $to = $ra->copy()->addDays(7)->endOfDay();
+            $used = AttendanceJob::whereBetween('run_at', [$from, $to])
+                ->pluck('run_at')
+                ->map(fn($dt) => Carbon::parse($dt)->format('i:s'))
+                ->all();
+            $usedSet = array_flip($used);
+            for ($tries = 0; $tries < 200; $tries++) {
+                $sec = random_int(1, 59);
+                $mmss = $ra->format('i').':'.sprintf('%02d', $sec);
+                if (!isset($usedSet[$mmss])) {
+                    $job->run_at = $ra->copy()->setSecond($sec);
+                    $job->save();
+                    $updated++;
+                    break;
+                }
+            }
+        }
+        return redirect()->route('admin.attendance_jobs.index', $request->only(['date']))->with('status', 'Randomized seconds for '.$updated.' jobs');
     }
 
     public function logs(Request $request)
