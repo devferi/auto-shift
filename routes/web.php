@@ -35,3 +35,8 @@ Route::prefix('admin')->group(function () {
     Route::post('sessions/start', [\App\Http\Controllers\Admin\SessionController::class, 'start'])->name('admin.sessions.start');
     Route::post('sessions/logout', [\App\Http\Controllers\Admin\SessionController::class, 'logout'])->name('admin.sessions.logout');
 });
+
+Route::post('/webhook/session', [\App\Http\Controllers\WebhookController::class, 'session'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+Route::post('/webhook/message', [\App\Http\Controllers\WebhookController::class, 'message'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
