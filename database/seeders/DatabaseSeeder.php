@@ -15,11 +15,9 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        $this->call(DefaultShiftSeeder::class);
+        $this->call(EmployeeSeeder::class);
+        $this->call(ShiftWeekPatternSeeder::class);
+        $this->call(DecemberScheduleSeeder::class);
     }
 }

@@ -13,9 +13,11 @@ Route::prefix('admin')->group(function () {
     Route::resource('work-places', \App\Http\Controllers\Admin\WorkPlaceController::class)->names('admin.work_places');
     Route::resource('shifts', \App\Http\Controllers\Admin\ShiftController::class)->names('admin.shifts');
     Route::resource('shift-time-rules', \App\Http\Controllers\Admin\ShiftTimeRuleController::class)->names('admin.shift_time_rules');
+    Route::get('shift-week-patterns', [\App\Http\Controllers\Admin\ShiftWeekPatternController::class, 'index'])->name('admin.shift_week_patterns.index');
     // Import routes placed BEFORE resource to avoid matching {schedule} with "import"
     Route::get('schedules/import', [\App\Http\Controllers\Admin\ScheduleImportController::class, 'create'])->name('admin.schedules.import');
     Route::post('schedules/import', [\App\Http\Controllers\Admin\ScheduleImportController::class, 'store'])->name('admin.schedules.import.store');
+    Route::get('schedules/monthly', [\App\Http\Controllers\Admin\ScheduleController::class, 'monthly'])->name('admin.schedules.monthly');
     // Constrain {schedule} param to numeric only
     Route::resource('schedules', \App\Http\Controllers\Admin\ScheduleController::class)
         ->names('admin.schedules')

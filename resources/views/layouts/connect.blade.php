@@ -13,8 +13,8 @@
     <style>
         body {font-family: 'Montserrat', sans-serif;}
         .connect-container {min-height: 100vh;}
-        .page-sidebar {width: 260px; background: #121826; color: #fff;}
-        .page-container {flex: 1; background: #f5f6f8;}
+        .page-sidebar {width: 260px; background: #121826; color: #fff; transition: transform .2s ease, width .2s ease; overflow: hidden; flex: 0 0 260px;}
+        .page-container {flex: 1 1 auto; background: #f5f6f8;}
         .logo-box {padding: 16px; font-weight: 700;}
         .accordion-menu {list-style: none; margin: 0; padding: 0 8px;}
         .accordion-menu li a {display: block; padding: 10px 12px; color: #cbd5e0; text-decoration: none; border-radius: 6px;}
@@ -40,6 +40,7 @@
             <ul class="accordion-menu">
                 <li><a href="{{ url('/admin') }}" class="@yield('menu.dashboard')"><i class="material-icons-outlined">dashboard</i> Dashboard</a></li>
                 <li><a href="{{ route('admin.schedules.index') }}" class="@yield('menu.schedules')"><i class="material-icons-outlined">calendar_today</i> Jadwal</a></li>
+                <li><a href="{{ route('admin.schedules.monthly') }}" class="@yield('menu.schedules_monthly')"><i class="material-icons-outlined">date_range</i> Jadwal Bulanan</a></li>
                 <li><a href="{{ route('admin.schedules.import') }}" class="@yield('menu.schedules_import')"><i class="material-icons-outlined">cloud_upload</i> Upload Jadwal</a></li>
                 <li><a href="{{ route('admin.attendance_jobs.index') }}" class="@yield('menu.jobs')"><i class="material-icons">done</i> Jobs</a></li>
                 <li><a href="{{ route('admin.logs.whatsapp') }}" class="@yield('menu.logs_whatsapp')"><i class="material-icons">receipt_long</i> Log WA</a></li>
@@ -50,6 +51,7 @@
                 <li><a href="{{ route('admin.employees.index') }}" class="@yield('menu.employees')"><i class="material-icons">group</i> Karyawan</a></li>
                 <li><a href="{{ route('admin.shifts.index') }}" class="@yield('menu.shifts')"><i class="material-icons">schedule</i> Shift</a></li>
                 <li><a href="{{ route('admin.shift_time_rules.index') }}" class="@yield('menu.shift_time_rules')"><i class="material-icons">watch_later</i> Aturan Jam</a></li>
+                <li><a href="{{ route('admin.shift_week_patterns.index') }}" class="@yield('menu.shift_week_patterns')"><i class="material-icons">view_week</i> Pola Shift Mingguan</a></li>
             </ul>
         </div>
     </div>
@@ -57,6 +59,7 @@
         <div class="page-header">
             <nav class="navbar navbar-expand">
                 <ul class="navbar-nav">
+                    <li class="nav-item"><button id="toggleSidebar" class="nav-link btn btn-link p-0"><i class="material-icons">menu</i></button></li>
                     <li class="nav-item"><span class="nav-link">{{ config('app.name') }}</span></li>
                 </ul>
                 <div class="ml-auto navbar-nav">
@@ -85,6 +88,19 @@
 <script src="{{ asset('theme/assets/plugins/flot/jquery.flot.resize.min.js') }}"></script>
 <script src="{{ asset('theme/assets/plugins/flot/jquery.flot.tooltip.min.js') }}"></script>
 <script src="{{ asset('theme/assets/js/connect.min.js') }}"></script>
+<script>
+    (function(){
+        var root = document.querySelector('.connect-container');
+        var btn = document.getElementById('toggleSidebar');
+        if(btn && root){
+            btn.addEventListener('click', function(){
+                root.classList.toggle('sidebar-collapsed');
+            });
+        }
+    })();
+</script>
 @stack('scripts')
 </body>
 </html>
+        .connect-container.sidebar-collapsed .page-sidebar {transform: translateX(-100%); width: 0; flex: 0 0 0;}
+        .connect-container.sidebar-collapsed .page-container {flex: 1 1 100%;}
